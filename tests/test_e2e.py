@@ -30,3 +30,36 @@ def test_reselect_existing_run_updates_visible_batch(client):
 
 def test_invalid_csv_type_rejected(client):
     assert client.post('/api/runs',json={'csv':123}).status_code==422
+
+def test_seal_flow_and_idempotent(client):
+    sid=client.post('/api/runs',json={'sample':'dirty.csv'}).get_json()['run_id']
+    r=client.post('/api/runs/'+sid+'/seal');assert r.status_code==200 and r.get_json()['sealed'] is True
+    again=client.post('/api/runs/'+sid+'/seal');assert again.status_code==200 and again.get_json()['sealed'] is True
+    assert client.post('/api/runs/missing/seal').status_code==404
+
+def test_unbalanced_seal_blocked_with_batch(client):
+    import sqlite3,json,os
+    sid=client.post('/api/runs',json={'sample':'dirty.csv'}).get_json()['run_id']
+    db=sqlite3.connect(os.environ['DB_PATH']);row=db.execute('SELECT body FROM runs WHERE id=?',(sid,)).fetchone()
+    body=json.loads(row[0]);body['reconcile']['balanced']=False;body['reconcile']['unbalanced_batches']=['B004']
+    body['archive']['ready']=False;body['archive']['unbalanced_batches']=['B004']
+    db.execute('INSERT INTO runs(id,body) VALUES(?,?)',('UNBAL-E2E',json.dumps(body,ensure_ascii=False)))
+    db.execute("INSERT INTO meta(key,value) VALUES('latest',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",('UNBAL-E2E',))
+    db.commit();db.close()
+    r=client.post('/api/runs/UNBAL-E2E/seal');assert r.status_code==422 and r.get_json()['code']=='UNBALANCED' and 'B004' in r.get_json()['message']
+    page=client.get('/m7_archive').data.decode()
+    assert '封存证据（已拦截）' in page and 'B004' in page and '归档已拦截' in page
+    assert client.get('/api/archive/UNBAL-E2E/export.csv').status_code==422
+
+def test_tampered_resubmit_rejected(client):
+    sid=client.post('/api/runs',json={'sample':'dirty.csv'}).get_json()['run_id']
+    client.post('/api/runs/'+sid+'/seal')
+    import sqlite3,json,os
+    db=sqlite3.connect(os.environ['DB_PATH']);row=db.execute('SELECT body FROM runs WHERE id=?',(sid,)).fetchone()
+    body=json.loads(row[0]);body['calculations'][0]['code']='PASS' if body['calculations'][0]['code']!='PASS' else 'FAIL'
+    body['archive']['content_sha256']='0'*64
+    db.execute('INSERT OR REPLACE INTO runs(id,body,sealed,content_sha256) VALUES(?,?,1,?)',(sid,json.dumps(body,ensure_ascii=False),'a'*64))
+    db.commit();db.close()
+    # 同源重跑产生正确校验值，与库中被改换的证据冲突时拒绝覆盖
+    r=client.post('/api/runs',json={'sample':'dirty.csv'})
+    assert r.status_code==409 and r.get_json()['code']=='EVIDENCE_CHANGED'

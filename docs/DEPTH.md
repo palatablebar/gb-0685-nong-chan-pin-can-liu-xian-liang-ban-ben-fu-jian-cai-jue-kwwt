@@ -29,6 +29,9 @@
 | TRAP-14 | 同版冲突 | 最后覆盖 | 整组隔离 | `app/modules/m2_mapping/rules.py` | `tests/test_mapping.py::test_real_conflict_quarantine` |
 | TRAP-18 | 三种空态 | 除零或伪成功 | 三个错误码 | `app/modules/m1_ingest/reader.py` | `tests/test_ingest.py::test_empty_three_states` |
 | TRAP-26 | 旧版本复核 | 覆盖新结论 | 事务条件更新 | `app/store.py` | `tests/test_archive.py::test_stale_review` |
+| TRAP-27 | 耗时/时刻混入校验值 | 同源重核验校验值漂移 | 稳定区(signed)与运行区(runtime)分离，校验值只取稳定证据 | `app/manifest.py`、`app/modules/m7_archive/export_out.py` | `tests/test_archive.py::test_checksum_ignores_elapsed_and_generated_at` |
+| TRAP-28 | 未平账目仍可归档 | 带病封存 | 封存前置对账校验并返回未平批次，页面禁用封存 | `app/store.py::seal`、`app/templates/m7_archive.html` | `tests/test_archive.py::test_seal_blocked_when_unbalanced` |
+| TRAP-29 | 重跑覆盖已确认证据 | 证据被悄悄改换 | 同ID内容校验值不一致拒绝写入，失败保留旧版 | `app/store.py::save` | `tests/test_archive.py::test_tampered_evidence_rejected_keeps_old` |
 | TRAP-15 | ug/kg与mg/kg | 差1000倍 | 浓度统一mg/kg | `app/modules/m4_segments/rules.py` | `tests/test_segments.py::test_unit_conversion` |
 | TRAP-25 | 标准时间边界 | 双版或错版 | 采样日半开区间选版 | `app/modules/m3_versions/standards.py` | `tests/test_versions.py::test_halfopen_effective` |
 | TRAP-20 | 复检引用环 | 遍历无法结束 | 引用路径检测 | `app/modules/m5_calculate/rules.py` | `tests/test_calculate.py::test_cycle_rejected` |

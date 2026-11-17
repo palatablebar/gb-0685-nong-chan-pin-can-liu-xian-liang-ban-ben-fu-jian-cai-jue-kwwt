@@ -20,7 +20,9 @@ def create_app():
     def health():return jsonify(status='ok')
     @app.post('/api/runs')
     def submit():
-        content,params=payload();state=run(content,params);return jsonify(store.save(state['run_id'],state))
+        content,params=payload();state=run(content,params)
+        # store 在校验值冲突时抛错且不改动既有记录，旧版证据得以保留。
+        return jsonify(store.save(state['run_id'],state))
     @app.get('/api/runs')
     def list_runs():return jsonify(store.history())
     @app.get('/api/runs/<run_id>')
@@ -30,10 +32,16 @@ def create_app():
         data=request.get_json(silent=True) or {}
         if not isinstance(data.get('version'),int):raise DomainError('VERSION','请提交复核版本')
         return jsonify(store.review(run_id,data['version'],data.get('decision')))
+    @app.post('/api/runs/<run_id>/seal')
+    def seal(run_id):
+        # 对账未平在此被拦截并返回对应批次；任何失败都不改动旧版证据。
+        return jsonify(store.seal(run_id))
     @app.get('/api/archive/<run_id>/export.csv')
     def download(run_id):
         state=store.get(run_id)
-        if not state.get('reconcile',{}).get('balanced'):raise DomainError('UNBALANCED','对账未平')
+        if not state.get('reconcile',{}).get('balanced'):
+            batches='、'.join(state.get('reconcile',{}).get('unbalanced_batches',[])) or '未识别批次'
+            raise DomainError('UNBALANCED','对账未平，批次 %s 不可归档'%batches)
         return Response(bundle(state),mimetype='text/csv; charset=utf-8',headers={'Content-Disposition':'attachment; filename=evidence.csv'})
     with app.app_context():
         if not store.history():

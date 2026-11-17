@@ -1,6 +1,7 @@
-from app.modules.m7_archive.export_out import checksum
-
 def execute(state):
-    state['archive']={'sha256':checksum(state),'evidence_count':len(state.get('calculations',[]))+len(state['quarantine']),
-        'ready':state.get('reconcile',{}).get('balanced',False)}
+    reconcile=state.get('reconcile',{})
+    state['archive']={
+        'evidence_count':len(state.get('calculations',[]))+len(state['quarantine']),
+        'ready':bool(reconcile.get('balanced',False)),
+        'unbalanced_batches':reconcile.get('unbalanced_batches',[])}
     return state

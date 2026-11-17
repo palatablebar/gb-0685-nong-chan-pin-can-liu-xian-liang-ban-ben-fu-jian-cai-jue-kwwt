@@ -22,6 +22,8 @@ def run(content,parameters=None,stage=7):
     state['run_id']=identity(content,params);state['manifest']=manifest(content,params,time.monotonic()-start)
     state['source_b64']=base64.b64encode(content).decode('ascii')
     if stage>=7:
+        # manifest 此时才就绪，统一在此计算稳定内容校验值（不含耗时与生成时刻）。
         from app.modules.m7_archive.export_out import checksum
-        state['archive']['sha256']=checksum(state)
+        state['archive']['content_sha256']=checksum(state)
+        state['archive']['sha256']=state['archive']['content_sha256']
     return state
